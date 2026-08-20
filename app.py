@@ -4,6 +4,7 @@ from datetime import datetime, date
 import json
 import time
 import random
+import re
 
 # ─────────────────────────────────────────────
 # CONFIGURAÇÃO DA PÁGINA
@@ -137,9 +138,47 @@ st.markdown("""
 
     .chat-user { background:#1A1C24; border:1px solid #33313D; border-radius:12px 12px 4px 12px; padding:12px 16px; margin:8px 0; }
     .chat-persona { background:#20161E; border:1px solid #ff3d68; border-radius:4px 12px 12px 12px; padding:12px 16px; margin:8px 0; }
+    .chat-messages-wrap { padding-bottom:100px; }
 
     .disclaimer { background:#1A1C24; border:1px solid #33313D; border-radius:10px; padding:10px 14px; font-size:0.82em; color:#B8B8C0 !important; margin-top:10px; }
     .disclaimer * { color:#B8B8C0 !important; }
+
+    /* ── Conexômetro colado acima da caixa de digitar ── */
+    .conexometro-fixo {
+        position:fixed; left:0; right:0; bottom:64px; z-index:999;
+        display:flex; justify-content:center;
+        background:linear-gradient(180deg, rgba(14,14,20,0) 0%, #0E0E14 35%, #0E0E14 100%);
+        padding:14px 0 10px 0;
+        pointer-events:none;
+    }
+    .conexometro-fixo-inner {
+        pointer-events:auto;
+        width:100%; max-width:700px; margin:0 24px;
+        background:#1A1C24; border:1px solid #33313D; border-radius:12px;
+        padding:10px 16px; box-shadow:0 -4px 16px rgba(0,0,0,0.35);
+    }
+
+    /* ── Contraste em componentes nativos do Streamlit (fora do .stApp custom) ── */
+    [data-testid="stMetricValue"], [data-testid="stMetricLabel"], [data-testid="stMetricDelta"] {
+        color:#F5F5F5 !important;
+    }
+    [data-testid="stChatInput"] { background:#0E0E14 !important; }
+    [data-testid="stChatInput"] textarea {
+        background:#1A1C24 !important; color:#F5F5F5 !important; border:1px solid #33313D !important;
+    }
+    [data-testid="stChatInput"] textarea::placeholder { color:#8A8A94 !important; }
+    div[data-baseweb="select"] * { color:#F5F5F5 !important; }
+    div[data-baseweb="select"] > div { background:#1A1C24 !important; border-color:#33313D !important; }
+    div[data-baseweb="popover"] { background:#1A1C24 !important; }
+    div[data-baseweb="popover"] li, div[data-baseweb="popover"] * { color:#F5F5F5 !important; }
+    [data-testid="stExpander"] { background:#1A1C24 !important; border:1px solid #33313D !important; border-radius:10px !important; }
+    [data-testid="stExpander"] summary, [data-testid="stExpander"] p { color:#F5F5F5 !important; }
+    [data-baseweb="tooltip"], [data-testid="stTooltipHoverTarget"] { color:#F5F5F5 !important; background:#1A1C24 !important; }
+    [data-testid="stToast"] { background:#1A1C24 !important; color:#F5F5F5 !important; border:1px solid #33313D !important; }
+    [data-testid="stCaptionContainer"], .stCaption, small { color:#B8B8C0 !important; }
+    [data-testid="stDataFrame"] { color-scheme: dark; }
+    a { color:#ff8fa8 !important; }
+    hr { border-color:#33313D !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -265,9 +304,15 @@ Você é só {char['pronome']}, uma pessoa normal numa conversa por mensagem.
 {difficulty_context}
 
 REGRAS DE NATURALIDADE (o mais importante — sua resposta NUNCA pode soar como chatbot):
-- VARIE O TAMANHO das mensagens sem padrão fixo: às vezes uma frase curta e seca, às vezes duas ou três
-  frases emendadas, às vezes só uma reação ("kkkkk para" / "sério?" / "não acredito"). Nunca todas as
-  respostas do mesmo tamanho.
+- MENSAGEM DE WHATSAPP DE VERDADE: gente real quase nunca escreve um parágrafo. A GRANDE MAIORIA das
+  suas respostas deve ser CURTA — uma frase, às vezes só um fragmento ou uma reação ("kkkkk para" /
+  "sério?" / "não acredito" / "affs" / "gostei disso"). Pense no tamanho de uma mensagem de celular
+  digitada rápido, não num texto escrito.
+- Só ocasionalmente (tipo 1 em cada 4-5 mensagens) permita-se emendar 2 frases curtas quando genuinamente
+  tiver algo a mais pra contar (uma piada, uma memória rápida). NUNCA escreva 3-4 frases seguidas — isso
+  é tamanho de texto, não de conversa por mensagem. Se a resposta estiver ficando longa, corte.
+- VARIE O TAMANHO sem padrão fixo, mas sempre dentro do "curto": às vezes uma frase seca, às vezes só
+  uma reação de 2-3 palavras. Nunca todas as respostas do mesmo tamanho.
 - NÃO termine toda mensagem com uma pergunta. Pessoas de verdade às vezes só comentam, discordam, mudam
   de assunto ou soltam uma opinião sem perguntar nada de volta.
 - Use a BIOGRAFIA para responder com detalhes concretos e específicos (nomes, lugares, memórias, opiniões
@@ -313,7 +358,11 @@ IMPROVISO TOTAL — SEM REPETIÇÃO:
 REGRAS DE CONTEÚDO (inegociáveis):
 - Mantenha tudo com bom gosto: flerte, tensão e humor são bem-vindos, conteúdo sexual explícito NUNCA.
 - Nunca inclua meta-comentários, notas, dicas ou explicações fora do personagem.
-- Respostas curtas a médias, como mensagens reais de conversa (1 a 4 frases, variando).
+- TAMANHO MÁXIMO: normalmente 1 frase curta. No máximo 2 frases curtas emendadas em casos raros.
+  NUNCA mais que isso — nada de parágrafo, nada de 3+ frases. Exemplo do tamanho certo: "sério? conta
+  essa história" ou "kkkkk boa, gostei". Exemplo ERRADO (longo demais, não use): "Nossa, que legal que
+  você gosta disso! Eu também curto bastante, principalmente quando tenho tempo livre nos fins de
+  semana, ainda mais se o clima ajudar."
 
 Depois da resposta em personagem, avalie internamente (NÃO aparece pro usuário) a última mensagem da
 pessoa, de 0 a 100 em: naturalidade, confianca, criatividade, conexao (curiosidade/escuta, evita
@@ -362,41 +411,82 @@ def extract_json(raw_text):
         raise
 
 
+def extract_failed_generation(error):
+    """Quando a Groq rejeita a geração por não bater com o schema JSON (json_validate_failed),
+    o texto que o modelo realmente gerou vem dentro do próprio erro, em 'failed_generation'.
+    Isso costuma ser uma fala perfeitamente boa em personagem — só não veio embrulhada em JSON.
+    Recuperamos esse texto em vez de descartar e cair numa resposta genérica."""
+    body = getattr(error, "body", None)
+    if isinstance(body, dict):
+        texto = body.get("error", {}).get("failed_generation")
+        if texto:
+            return texto.strip()
+    m = re.search(r"failed_generation['\"]?:\s*['\"](.+?)['\"]\s*[}\]]", str(error), re.DOTALL)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
 def call_ai(character, difficulty, phase, history, user_message=None, opening=False):
-    try:
-        client = Groq(api_key=st.session_state.api_key)
-        system_prompt = build_system_prompt(character, difficulty, phase)
+    client = Groq(api_key=st.session_state.api_key)
+    system_prompt = build_system_prompt(character, difficulty, phase)
 
-        n_trocas = sum(1 for m in history if m["role"] == "user")
-        if n_trocas > 0:
-            system_prompt += (
-                f"\n\nLEMBRETE DE CONTINUIDADE: vocês já trocaram {n_trocas} mensagens nessa conversa. "
-                f"Continue soando tão espontâneo, específico e cheio de personalidade quanto na primeira "
-                f"mensagem — não fique mais genérico, mais curto ou mais impessoal só porque a conversa "
-                f"está avançando."
-            )
-
-        messages = [{"role": "system", "content": system_prompt}]
-        for m in history:
-            role = "assistant" if m["role"] == "assistant" else "user"
-            messages.append({"role": role, "content": m["content"]})
-        messages.append({"role": "user", "content": build_opening_prompt(character) if opening else user_message})
-
-        completion = client.chat.completions.create(
-            model=GROQ_MODEL, messages=messages, temperature=0.9,
-            max_tokens=800, response_format={"type": "json_object"},
-            reasoning_effort="low", reasoning_format="hidden",
+    n_trocas = sum(1 for m in history if m["role"] == "user")
+    if n_trocas > 0:
+        system_prompt += (
+            f"\n\nLEMBRETE DE CONTINUIDADE: vocês já trocaram {n_trocas} mensagens nessa conversa. "
+            f"Continue soando tão espontâneo, específico e cheio de personalidade quanto na primeira "
+            f"mensagem — não fique mais genérico, mais curto ou mais impessoal só porque a conversa "
+            f"está avançando."
         )
-        data = extract_json(completion.choices[0].message.content)
-        resposta = (data.get("resposta") or "...").strip()
-        avaliacao = data.get("avaliacao", {})
-        for k in CRITERIA_WEIGHTS:
-            avaliacao[k] = max(0, min(100, int(avaliacao.get(k, 50))))
-        delta = max(-15, min(15, int(data.get("delta_conexometro", 0))))
-        return resposta, avaliacao, delta
-    except Exception as e:
-        st.session_state.last_error = str(e)
-        return "Hmm, deixa eu pensar melhor no que dizer... me conta mais?", {k: 50 for k in CRITERIA_WEIGHTS}, 0
+
+    base_messages = [{"role": "system", "content": system_prompt}]
+    for m in history:
+        role = "assistant" if m["role"] == "assistant" else "user"
+        base_messages.append({"role": role, "content": m["content"]})
+    base_messages.append({"role": "user", "content": build_opening_prompt(character) if opening else user_message})
+
+    last_error = None
+    for attempt in range(2):
+        try:
+            messages = list(base_messages)
+            kwargs = dict(
+                model=GROQ_MODEL, messages=messages, temperature=0.9,
+                max_tokens=350, reasoning_effort="low", reasoning_format="hidden",
+            )
+            if attempt == 0:
+                # tentativa normal: modo JSON estrito
+                kwargs["response_format"] = {"type": "json_object"}
+                completion = client.chat.completions.create(**kwargs)
+                raw = completion.choices[0].message.content
+            else:
+                # retry: sem validação estrita da Groq + prefill "{" pra guiar o formato,
+                # e parseamos o resultado com tolerância via extract_json
+                messages.append({"role": "assistant", "content": "{"})
+                kwargs["messages"] = messages
+                completion = client.chat.completions.create(**kwargs)
+                raw = "{" + (completion.choices[0].message.content or "")
+
+            data = extract_json(raw)
+            resposta = (data.get("resposta") or "...").strip()
+            avaliacao = data.get("avaliacao", {})
+            for k in CRITERIA_WEIGHTS:
+                avaliacao[k] = max(0, min(100, int(avaliacao.get(k, 50))))
+            delta = max(-15, min(15, int(data.get("delta_conexometro", 0))))
+            return resposta, avaliacao, delta
+
+        except Exception as e:
+            last_error = e
+            # a Groq recusou o JSON, mas normalmente manda a fala real dentro do próprio erro —
+            # se conseguirmos recuperar isso, usamos como resposta em vez de cair no genérico
+            texto_salvo = extract_failed_generation(e)
+            if texto_salvo:
+                st.session_state.last_error = f"(recuperado do erro) {str(e)[:200]}"
+                return texto_salvo, {k: 60 for k in CRITERIA_WEIGHTS}, 0
+            continue  # tenta de novo com o formato mais tolerante
+
+    st.session_state.last_error = str(last_error)
+    return "Hmm, deixa eu pensar melhor no que dizer... me conta mais?", {k: 50 for k in CRITERIA_WEIGHTS}, 0
 
 
 def time_penalty(resp_time):
@@ -554,7 +644,7 @@ def generate_profile(avg_scores):
 # ─────────────────────────────────────────────
 # COMPONENTES DE UI
 # ─────────────────────────────────────────────
-def connexometer_bar(value):
+def connexometer_bar(value, fixed=False):
     value = max(0, min(100, value))
     if value >= 80:
         color, status = "#ff3d68", "🔥 A conversa está muito boa."
@@ -562,13 +652,24 @@ def connexometer_bar(value):
         color, status = "#F5C542", "⚠️ A conexão está estável."
     else:
         color, status = "#4aa8ff", "❄️ A conexão está esfriando."
-    st.markdown(f"""
-        <div style="margin-bottom:4px; font-weight:600;">❤️ CONEXÔMETRO — {int(value)}%</div>
-        <div style="background:#20222C; border-radius:8px; height:22px; width:100%; overflow:hidden;">
+
+    conteudo = f"""
+        <div style="margin-bottom:4px; font-weight:600; color:#F5F5F5;">❤️ CONEXÔMETRO — {int(value)}%</div>
+        <div style="background:#20222C; border-radius:8px; height:22px; width:100%; overflow:hidden; border:1px solid #33313D;">
             <div style="background:{color}; width:{value}%; height:100%; transition: width 0.4s;"></div>
         </div>
-        <div style="font-size:0.85em; margin-top:4px; opacity:0.85;">{status}</div>
-    """, unsafe_allow_html=True)
+        <div style="font-size:0.85em; margin-top:4px; opacity:0.9; color:#E8E8EC;">{status}</div>
+    """
+
+    if fixed:
+        # Fica colado logo acima da caixa de digitar, sempre visível, mesmo rolando a conversa
+        st.markdown(f"""
+            <div class="conexometro-fixo">
+                <div class="conexometro-fixo-inner">{conteudo}</div>
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(conteudo, unsafe_allow_html=True)
 
 def phase_timer():
     elapsed = time.time() - st.session_state.phase_start_time
@@ -797,13 +898,14 @@ elif st.session_state.etapa == "App":
             with t3:
                 st.markdown(f"{CHARACTERS[character]['emoji']} **{character}**")
 
-            connexometer_bar(st.session_state.connexometer)
             st.markdown("<hr class='divider'>", unsafe_allow_html=True)
 
+            st.markdown("<div class='chat-messages-wrap'>", unsafe_allow_html=True)
             for m in st.session_state.messages:
                 css_class = "chat-persona" if m["role"] == "assistant" else "chat-user"
                 autor = f"{CHARACTERS[character]['emoji']} {character}" if m["role"] == "assistant" else "🙂 Você"
                 st.markdown(f"<div class='{css_class}'><strong>{autor}:</strong><br>{m['content']}</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
             if remaining <= 0:
                 scores = st.session_state.interaction_scores
@@ -820,6 +922,9 @@ elif st.session_state.etapa == "App":
                 st.session_state.interaction_scores = []
                 st.session_state.estagio = "phase_end"
                 st.rerun()
+
+            # Conexômetro colado bem acima da caixa de digitar — sempre visível, mesmo rolando o chat
+            connexometer_bar(st.session_state.connexometer, fixed=True)
 
             user_msg = st.chat_input("Digite sua resposta...")
             if user_msg:
