@@ -6,6 +6,14 @@ import time
 import random
 import re
 
+# Auto-atualização a cada segundo (pra cronômetro/conexômetro nunca parecerem "parados").
+# Se o pacote não estiver instalado, o app cai num modo com botão manual de atualizar.
+try:
+    from streamlit_autorefresh import st_autorefresh
+    HAS_AUTOREFRESH = True
+except ImportError:
+    HAS_AUTOREFRESH = False
+
 # ─────────────────────────────────────────────
 # CONFIGURAÇÃO DA PÁGINA
 # ─────────────────────────────────────────────
@@ -93,89 +101,94 @@ CENARIOS_ABERTURA = [
 ]
 
 # ─────────────────────────────────────────────
-# ESTILO CSS
+# ESTILO CSS — tema claro (evita conflito com componentes nativos do Streamlit,
+# que já são claros por padrão; lutar contra isso com CSS escuro é o que causava
+# as abas/caixas ilegíveis)
 # ─────────────────────────────────────────────
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-    .stApp { background-color:#0E0E14; font-family:'Inter',sans-serif; }
+    .stApp { background-color:#F8F9FA; font-family:'Inter',sans-serif; }
     [data-testid="stSidebar"] { display:none; }
 
     .stTextInput>div>div>input, .stTextArea>div>textarea,
     .stSelectbox>div>div>div, .stNumberInput>div>div>input {
-        background-color:#1A1C24 !important; color:#F5F5F5 !important;
-        border:1px solid #33313D !important; font-family:'Inter',sans-serif !important;
+        background-color:#FFFFFF !important; color:#1A1A2E !important;
+        border:1px solid #CED4DA !important; font-family:'Inter',sans-serif !important;
     }
 
     .stButton>button {
         width:100%; border-radius:10px; height:3.2em;
         background:linear-gradient(135deg,#ff3d68,#c92a5b) !important; color:white !important;
-        font-weight:600; border:none; box-shadow:2px 2px 10px rgba(255,61,104,0.25);
+        font-weight:600; border:none; box-shadow:2px 2px 10px rgba(255,61,104,0.2);
         font-family:'Inter',sans-serif !important; transition:all 0.2s ease;
     }
     .stButton>button:hover { background:linear-gradient(135deg,#c92a5b,#a01e48) !important; transform:translateY(-1px); }
     .stApp .stButton>button, .stApp .stButton>button p,
     .stApp .stButton>button span, .stApp .stButton>button div { color:white !important; }
 
-    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5 { color:#F5F5F5 !important; font-family:'Inter',sans-serif !important; font-weight:700 !important; }
-    .stApp p, .stApp label, .stApp span, .stApp div { color:#E8E8EC; }
+    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5 { color:#1A1A2E !important; font-family:'Inter',sans-serif !important; font-weight:700 !important; }
+    .stApp p, .stApp label, .stApp span, .stApp div { color:#2B2B33; }
 
-    .card { background:linear-gradient(135deg,#1A1C24,#20222C); padding:20px; border-radius:14px; border:1px solid #33313D; margin-bottom:14px; }
-    .card-pink { background:linear-gradient(135deg,#2A1520,#3A1828); padding:20px; border-radius:14px; border:1px solid #ff3d68; margin-bottom:14px; }
-    .card-purple { background:linear-gradient(135deg,#1E1A2E,#241E3A); padding:20px; border-radius:14px; border:1px solid #8B5CF6; margin-bottom:14px; }
-    .card-gold { background:linear-gradient(135deg,#2A2416,#332B18); padding:20px; border-radius:14px; border:1px solid #F5C542; margin-bottom:14px; }
+    .card { background:linear-gradient(135deg,#FFFFFF,#F1F3F5); padding:20px; border-radius:14px; border:1px solid #DEE2E6; margin-bottom:14px; }
+    .card-pink { background:linear-gradient(135deg,#FFF0F4,#FFE1E9); padding:20px; border-radius:14px; border:1px solid #ff3d68; margin-bottom:14px; }
+    .card-purple { background:linear-gradient(135deg,#F3F0FF,#EAE3FF); padding:20px; border-radius:14px; border:1px solid #8B5CF6; margin-bottom:14px; }
+    .card-gold { background:linear-gradient(135deg,#FFFAEB,#FFF3CD); padding:20px; border-radius:14px; border:1px solid #F5C542; margin-bottom:14px; }
+    .card, .card *, .card-pink, .card-pink *, .card-purple, .card-purple *, .card-gold, .card-gold * { color:#1A1A2E !important; }
 
-    .stat-box { background:#1A1C24; border-radius:12px; padding:16px; text-align:center; border:1px solid #33313D; }
+    .stat-box { background:#FFFFFF; border-radius:12px; padding:16px; text-align:center; border:1px solid #DEE2E6; }
     .stat-numero { font-size:2em; font-weight:700; color:#ff3d68 !important; }
 
-    .badge { background:#33313D; color:white !important; padding:4px 12px; border-radius:20px; font-size:0.78em; font-weight:600; display:inline-block; margin:2px; }
+    .badge { background:#495057; color:white !important; padding:4px 12px; border-radius:20px; font-size:0.78em; font-weight:600; display:inline-block; margin:2px; }
     .badge-verde { background:#059669; color:white !important; padding:4px 12px; border-radius:20px; font-size:0.78em; font-weight:600; display:inline-block; margin:2px; }
     .badge-amarelo { background:#B45309; color:white !important; padding:4px 12px; border-radius:20px; font-size:0.78em; font-weight:600; display:inline-block; margin:2px; }
     .badge-vermelho { background:#ff3d68; color:white !important; padding:4px 12px; border-radius:20px; font-size:0.78em; font-weight:600; display:inline-block; margin:2px; }
 
-    .divider { border:none; height:1px; background:linear-gradient(to right,transparent,#33313D,transparent); margin:18px 0; }
+    .divider { border:none; height:1px; background:linear-gradient(to right,transparent,#CED4DA,transparent); margin:18px 0; }
 
-    .chat-user { background:#1A1C24; border:1px solid #33313D; border-radius:12px 12px 4px 12px; padding:12px 16px; margin:8px 0; }
-    .chat-persona { background:#20161E; border:1px solid #ff3d68; border-radius:4px 12px 12px 12px; padding:12px 16px; margin:8px 0; }
+    .chat-user { background:#FFFFFF; border:1px solid #CED4DA; border-radius:12px 12px 4px 12px; padding:12px 16px; margin:8px 0; }
+    .chat-persona { background:#FFF0F4; border:1px solid #ff3d68; border-radius:4px 12px 12px 12px; padding:12px 16px; margin:8px 0; }
+    .chat-user *, .chat-persona * { color:#1A1A2E !important; }
     .chat-messages-wrap { padding-bottom:8px; }
 
-    .disclaimer { background:#1A1C24; border:1px solid #33313D; border-radius:10px; padding:10px 14px; font-size:0.82em; color:#B8B8C0 !important; margin-top:10px; }
-    .disclaimer * { color:#B8B8C0 !important; }
+    .disclaimer { background:#FFFFFF; border:1px solid #CED4DA; border-radius:10px; padding:10px 14px; font-size:0.82em; color:#495057 !important; margin-top:10px; }
+    .disclaimer * { color:#495057 !important; }
 
-    /* ── Conexômetro colado acima da caixa de digitar (sem sobrepor o input) ── */
-    .conexometro-colado {
-        background:#1A1C24; border:1px solid #33313D; border-radius:12px;
-        padding:10px 16px; margin:10px 0 4px 0;
-        box-shadow:0 2px 10px rgba(0,0,0,0.25);
+    /* ── Conexômetro + cronômetro colados acima da caixa de digitar ── */
+    .painel-colado {
+        background:#FFFFFF; border:2px solid #ff3d68; border-radius:12px;
+        padding:12px 16px; margin:10px 0 4px 0;
+        box-shadow:0 2px 10px rgba(0,0,0,0.08);
     }
+    .painel-colado * { color:#1A1A2E !important; }
 
-    /* ── Contraste em componentes nativos do Streamlit (fora do .stApp custom) ── */
-    [data-testid="stMetricValue"], [data-testid="stMetricLabel"], [data-testid="stMetricDelta"] {
-        color:#F5F5F5 !important;
-    }
+    /* ── Componentes nativos do Streamlit: garantir texto escuro em fundo claro ── */
+    [data-testid="stMetricValue"] { color:#1A1A2E !important; }
+    [data-testid="stMetricLabel"] { color:#495057 !important; }
+    [data-testid="stMetricDelta"] { color:#1A1A2E !important; }
     [data-testid="stChatInput"] {
-        background:#1A1C24 !important; border:2px solid #ff3d68 !important; border-radius:14px !important;
+        background:#FFFFFF !important; border:2px solid #ff3d68 !important; border-radius:14px !important;
         padding:4px 8px !important;
     }
     [data-testid="stChatInput"] textarea {
-        background:#1A1C24 !important; color:#F5F5F5 !important; border:none !important;
+        background:#FFFFFF !important; color:#1A1A2E !important; border:none !important;
     }
-    [data-testid="stChatInput"] textarea::placeholder { color:#A0A0AA !important; }
+    [data-testid="stChatInput"] textarea::placeholder { color:#868E96 !important; }
     [data-testid="stChatInput"] button { background:#ff3d68 !important; }
     [data-testid="stChatInput"] button svg { fill:white !important; }
-    div[data-baseweb="select"] * { color:#F5F5F5 !important; }
-    div[data-baseweb="select"] > div { background:#1A1C24 !important; border-color:#33313D !important; }
-    div[data-baseweb="popover"] { background:#1A1C24 !important; }
-    div[data-baseweb="popover"] li, div[data-baseweb="popover"] * { color:#F5F5F5 !important; }
-    [data-testid="stExpander"] { background:#1A1C24 !important; border:1px solid #33313D !important; border-radius:10px !important; }
-    [data-testid="stExpander"] summary, [data-testid="stExpander"] p { color:#F5F5F5 !important; }
-    [data-baseweb="tooltip"], [data-testid="stTooltipHoverTarget"] { color:#F5F5F5 !important; background:#1A1C24 !important; }
-    [data-testid="stToast"] { background:#1A1C24 !important; color:#F5F5F5 !important; border:1px solid #33313D !important; }
-    [data-testid="stCaptionContainer"], .stCaption, small { color:#B8B8C0 !important; }
-    [data-testid="stDataFrame"] { color-scheme: dark; }
-    a { color:#ff8fa8 !important; }
-    hr { border-color:#33313D !important; }
+    div[data-baseweb="select"] * { color:#1A1A2E !important; }
+    div[data-baseweb="select"] > div { background:#FFFFFF !important; border-color:#CED4DA !important; }
+    div[data-baseweb="popover"] { background:#FFFFFF !important; }
+    div[data-baseweb="popover"] li, div[data-baseweb="popover"] * { color:#1A1A2E !important; }
+    [data-testid="stExpander"] { background:#FFFFFF !important; border:1px solid #CED4DA !important; border-radius:10px !important; }
+    [data-testid="stExpander"] summary, [data-testid="stExpander"] p { color:#1A1A2E !important; }
+    [data-baseweb="tooltip"], [data-testid="stTooltipHoverTarget"] { color:#1A1A2E !important; background:#FFFFFF !important; }
+    [data-testid="stToast"] { background:#FFFFFF !important; color:#1A1A2E !important; border:1px solid #CED4DA !important; }
+    [data-testid="stCaptionContainer"], .stCaption, small { color:#6C757D !important; }
+    [data-testid="stDataFrame"] { color-scheme: light; }
+    a { color:#c92a5b !important; }
+    hr { border-color:#DEE2E6 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -641,7 +654,7 @@ def generate_profile(avg_scores):
 # ─────────────────────────────────────────────
 # COMPONENTES DE UI
 # ─────────────────────────────────────────────
-def connexometer_bar(value, colado=False):
+def connexometer_bar(value, colado=False, remaining_seconds=None):
     value = max(0, min(100, value))
     if value >= 80:
         color, status = "#ff3d68", "🔥 A conversa está muito boa."
@@ -650,18 +663,28 @@ def connexometer_bar(value, colado=False):
     else:
         color, status = "#4aa8ff", "❄️ A conexão está esfriando."
 
+    tempo_html = ""
+    if remaining_seconds is not None:
+        mins, secs = divmod(int(max(0, remaining_seconds)), 60)
+        cor_tempo = "#ff3d68" if remaining_seconds < 30 else "#1A1A2E"
+        tempo_html = (
+            f"<div style='text-align:center; font-size:1.6em; font-weight:700; color:{cor_tempo}; "
+            f"margin-bottom:8px;'>⏱️ {mins:02d}:{secs:02d}</div>"
+        )
+
     conteudo = f"""
-        <div style="margin-bottom:4px; font-weight:600; color:#F5F5F5;">❤️ CONEXÔMETRO — {int(value)}%</div>
-        <div style="background:#20222C; border-radius:8px; height:22px; width:100%; overflow:hidden; border:1px solid #33313D;">
+        {tempo_html}
+        <div style="margin-bottom:4px; font-weight:600; color:#1A1A2E;">❤️ CONEXÔMETRO — {int(value)}%</div>
+        <div style="background:#E9ECEF; border-radius:8px; height:22px; width:100%; overflow:hidden; border:1px solid #CED4DA;">
             <div style="background:{color}; width:{value}%; height:100%; transition: width 0.4s;"></div>
         </div>
-        <div style="font-size:0.85em; margin-top:4px; opacity:0.9; color:#E8E8EC;">{status}</div>
+        <div style="font-size:0.85em; margin-top:4px; opacity:0.9; color:#495057;">{status}</div>
     """
 
     if colado:
         # Fica no fluxo normal da página, logo acima da caixa de digitar — sem sobrepor nem
         # bloquear o campo de texto (não usa position:fixed de propósito).
-        st.markdown(f'<div class="conexometro-colado">{conteudo}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="painel-colado">{conteudo}</div>', unsafe_allow_html=True)
     else:
         st.markdown(conteudo, unsafe_allow_html=True)
 
@@ -857,6 +880,9 @@ elif st.session_state.etapa == "App":
         if not st.session_state.api_key:
             st.error("Chave da Groq não configurada. Volte ao Login.")
         else:
+            if HAS_AUTOREFRESH:
+                st_autorefresh(interval=1000, key="training_tick")
+
             phase = PHASES[st.session_state.phase_index]
             character = st.session_state.character
             difficulty = PHASE_DIFFICULTY[phase]
@@ -880,17 +906,11 @@ elif st.session_state.etapa == "App":
             )
             st.markdown(
                 f"<p style='text-align:center;'><span class='{rk['badge']}'>{rk['emoji']} {st.session_state.current_rank}</span> "
-                f"<span class='badge'>{DIFFICULTIES[difficulty]['emoji']} nível {difficulty}</span></p>",
+                f"<span class='badge'>{DIFFICULTIES[difficulty]['emoji']} nível {difficulty}</span> "
+                f"<span class='badge'>💬 {len(st.session_state.interaction_scores)} respostas</span> "
+                f"<span class='badge'>{CHARACTERS[character]['emoji']} {character}</span></p>",
                 unsafe_allow_html=True,
             )
-
-            t1, t2, t3 = st.columns(3)
-            with t1:
-                remaining = phase_timer()
-            with t2:
-                st.markdown(f"💬 **{len(st.session_state.interaction_scores)}** respostas")
-            with t3:
-                st.markdown(f"{CHARACTERS[character]['emoji']} **{character}**")
 
             st.markdown("<hr class='divider'>", unsafe_allow_html=True)
 
@@ -900,6 +920,9 @@ elif st.session_state.etapa == "App":
                 autor = f"{CHARACTERS[character]['emoji']} {character}" if m["role"] == "assistant" else "🙂 Você"
                 st.markdown(f"<div class='{css_class}'><strong>{autor}:</strong><br>{m['content']}</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
+
+            elapsed = time.time() - st.session_state.phase_start_time
+            remaining = max(0, st.session_state.phase_seconds - elapsed)
 
             if remaining <= 0:
                 scores = st.session_state.interaction_scores
@@ -917,8 +940,9 @@ elif st.session_state.etapa == "App":
                 st.session_state.estagio = "phase_end"
                 st.rerun()
 
-            # Conexômetro colado bem acima da caixa de digitar — sempre visível, mesmo rolando o chat
-            connexometer_bar(st.session_state.connexometer, colado=True)
+            # Tempo + Conexômetro colados bem acima da caixa de digitar — sempre visíveis,
+            # atualizando sozinhos a cada segundo (via auto-refresh)
+            connexometer_bar(st.session_state.connexometer, colado=True, remaining_seconds=remaining)
 
             user_msg = st.chat_input("Digite sua resposta...")
             if user_msg:
@@ -946,9 +970,14 @@ elif st.session_state.etapa == "App":
                 st.toast(f"{'📈' if net >= 0 else '📉'} {'+' if net>=0 else ''}{net} no conexômetro", icon="🧲")
                 st.rerun()
 
-            st.caption("A IA está interpretando o personagem em tempo real — quanto mais você demorar, mais o conexômetro esfria.")
-            if st.button("🔄 Atualizar cronômetro"):
-                st.rerun()
+            if not HAS_AUTOREFRESH:
+                st.caption(
+                    "⚠️ Auto-atualização não instalada — o cronômetro só avança quando você envia uma "
+                    "mensagem ou clica no botão abaixo. Adicione `streamlit-autorefresh` ao requirements.txt "
+                    "pra ele correr sozinho."
+                )
+                if st.button("🔄 Atualizar cronômetro"):
+                    st.rerun()
 
     # ---------------- FIM DE FASE ----------------
     elif estagio == "phase_end":
