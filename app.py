@@ -138,35 +138,32 @@ st.markdown("""
 
     .chat-user { background:#1A1C24; border:1px solid #33313D; border-radius:12px 12px 4px 12px; padding:12px 16px; margin:8px 0; }
     .chat-persona { background:#20161E; border:1px solid #ff3d68; border-radius:4px 12px 12px 12px; padding:12px 16px; margin:8px 0; }
-    .chat-messages-wrap { padding-bottom:100px; }
+    .chat-messages-wrap { padding-bottom:8px; }
 
     .disclaimer { background:#1A1C24; border:1px solid #33313D; border-radius:10px; padding:10px 14px; font-size:0.82em; color:#B8B8C0 !important; margin-top:10px; }
     .disclaimer * { color:#B8B8C0 !important; }
 
-    /* ── Conexômetro colado acima da caixa de digitar ── */
-    .conexometro-fixo {
-        position:fixed; left:0; right:0; bottom:64px; z-index:999;
-        display:flex; justify-content:center;
-        background:linear-gradient(180deg, rgba(14,14,20,0) 0%, #0E0E14 35%, #0E0E14 100%);
-        padding:14px 0 10px 0;
-        pointer-events:none;
-    }
-    .conexometro-fixo-inner {
-        pointer-events:auto;
-        width:100%; max-width:700px; margin:0 24px;
+    /* ── Conexômetro colado acima da caixa de digitar (sem sobrepor o input) ── */
+    .conexometro-colado {
         background:#1A1C24; border:1px solid #33313D; border-radius:12px;
-        padding:10px 16px; box-shadow:0 -4px 16px rgba(0,0,0,0.35);
+        padding:10px 16px; margin:10px 0 4px 0;
+        box-shadow:0 2px 10px rgba(0,0,0,0.25);
     }
 
     /* ── Contraste em componentes nativos do Streamlit (fora do .stApp custom) ── */
     [data-testid="stMetricValue"], [data-testid="stMetricLabel"], [data-testid="stMetricDelta"] {
         color:#F5F5F5 !important;
     }
-    [data-testid="stChatInput"] { background:#0E0E14 !important; }
-    [data-testid="stChatInput"] textarea {
-        background:#1A1C24 !important; color:#F5F5F5 !important; border:1px solid #33313D !important;
+    [data-testid="stChatInput"] {
+        background:#1A1C24 !important; border:2px solid #ff3d68 !important; border-radius:14px !important;
+        padding:4px 8px !important;
     }
-    [data-testid="stChatInput"] textarea::placeholder { color:#8A8A94 !important; }
+    [data-testid="stChatInput"] textarea {
+        background:#1A1C24 !important; color:#F5F5F5 !important; border:none !important;
+    }
+    [data-testid="stChatInput"] textarea::placeholder { color:#A0A0AA !important; }
+    [data-testid="stChatInput"] button { background:#ff3d68 !important; }
+    [data-testid="stChatInput"] button svg { fill:white !important; }
     div[data-baseweb="select"] * { color:#F5F5F5 !important; }
     div[data-baseweb="select"] > div { background:#1A1C24 !important; border-color:#33313D !important; }
     div[data-baseweb="popover"] { background:#1A1C24 !important; }
@@ -644,7 +641,7 @@ def generate_profile(avg_scores):
 # ─────────────────────────────────────────────
 # COMPONENTES DE UI
 # ─────────────────────────────────────────────
-def connexometer_bar(value, fixed=False):
+def connexometer_bar(value, colado=False):
     value = max(0, min(100, value))
     if value >= 80:
         color, status = "#ff3d68", "🔥 A conversa está muito boa."
@@ -661,13 +658,10 @@ def connexometer_bar(value, fixed=False):
         <div style="font-size:0.85em; margin-top:4px; opacity:0.9; color:#E8E8EC;">{status}</div>
     """
 
-    if fixed:
-        # Fica colado logo acima da caixa de digitar, sempre visível, mesmo rolando a conversa
-        st.markdown(f"""
-            <div class="conexometro-fixo">
-                <div class="conexometro-fixo-inner">{conteudo}</div>
-            </div>
-        """, unsafe_allow_html=True)
+    if colado:
+        # Fica no fluxo normal da página, logo acima da caixa de digitar — sem sobrepor nem
+        # bloquear o campo de texto (não usa position:fixed de propósito).
+        st.markdown(f'<div class="conexometro-colado">{conteudo}</div>', unsafe_allow_html=True)
     else:
         st.markdown(conteudo, unsafe_allow_html=True)
 
@@ -924,7 +918,7 @@ elif st.session_state.etapa == "App":
                 st.rerun()
 
             # Conexômetro colado bem acima da caixa de digitar — sempre visível, mesmo rolando o chat
-            connexometer_bar(st.session_state.connexometer, fixed=True)
+            connexometer_bar(st.session_state.connexometer, colado=True)
 
             user_msg = st.chat_input("Digite sua resposta...")
             if user_msg:
